@@ -1,4 +1,7 @@
 # xml-naming
+[![xml-naming downloads](https://img.shields.io/npm/dw/xml-naming.svg)](https://npm-compare.com/xml-naming) 
+[![xml-naming version](https://img.shields.io/npm/v/xml-naming.svg)](https://www.npmjs.com/package/xml-naming)
+[![xml-naming license](https://img.shields.io/npm/l/xml-naming.svg)](https://github.com/NaturalIntelligence/xml-naming)
 
 Validates XML name productions as defined in the [XML 1.0](https://www.w3.org/TR/xml/) and [XML 1.1](https://www.w3.org/TR/xml11/) specifications.
 
