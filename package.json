@@ -16,7 +16,8 @@
     "README.md"
   ],
   "scripts": {
-    "test": "jasmine specs/*spec.js"
+    "test": "jasmine specs/*spec.js",
+    "perf": "node specs/perf.js"
   },
   "keywords": [
     "xml",

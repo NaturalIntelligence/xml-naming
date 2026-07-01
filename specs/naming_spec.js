@@ -366,4 +366,85 @@ describe('sanitize()', () => {
   it('does not prepend for nmToken (digit start is valid)', () => {
     expect(sanitize('123abc', 'nmToken')).toBe('123abc');
   });
+
+  it('replaces non-ASCII characters when asciiOnly is true', () => {
+    expect(sanitize('café', 'name', { asciiOnly: true })).toBe('caf_');
+  });
+
+  it('keeps non-ASCII characters when asciiOnly is false (default)', () => {
+    expect(sanitize('café', 'name')).toBe('café');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// asciiOnly option
+// ---------------------------------------------------------------------------
+
+describe('asciiOnly option', () => {
+  it('is off by default — behaviour is unchanged when the option is omitted', () => {
+    // Same assertions as the default-behaviour specs above, repeated here as
+    // an explicit backward-compatibility regression check.
+    expect(name('café')).toBe(true);
+    expect(name('元素')).toBe(true);
+    expect(ncName('café')).toBe(true);
+    expect(qName('svg:café')).toBe(true);
+  });
+
+  it('accepts plain ASCII names identically to the default matcher', () => {
+    const opts = { asciiOnly: true };
+    expect(name('foo', opts)).toBe(true);
+    expect(name('_bar', opts)).toBe(true);
+    expect(name('a1', opts)).toBe(true);
+    expect(name('a-b.c', opts)).toBe(true);
+    expect(name('a:b:c', opts)).toBe(true);
+    expect(ncName('my-id_1', opts)).toBe(true);
+    expect(qName('svg:circle', opts)).toBe(true);
+    expect(nmToken('123', opts)).toBe(true);
+    expect(nmTokens('tok1 tok2 -foo 123', opts)).toBe(true);
+  });
+
+  it('still rejects structurally invalid ASCII names', () => {
+    const opts = { asciiOnly: true };
+    expect(name('1foo', opts)).toBe(false);
+    expect(name('-foo', opts)).toBe(false);
+    expect(name('foo bar', opts)).toBe(false);
+    expect(ncName('foo:bar', opts)).toBe(false);
+    expect(qName('a:b:c', opts)).toBe(false);
+  });
+
+  it('rejects non-ASCII names that are valid under the default matcher', () => {
+    const opts = { asciiOnly: true };
+    expect(name('café', opts)).toBe(false);   // \u00E9 accepted by default, not ASCII
+    expect(name('元素', opts)).toBe(false);   // valid Han range char, not ASCII
+    expect(ncName('café', opts)).toBe(false);
+    expect(qName('svg:café', opts)).toBe(false);
+  });
+
+  it('works the same for xmlVersion 1.1 without needing the /u flag', () => {
+    const opts11 = { xmlVersion: '1.1', asciiOnly: true };
+    expect(name('foo-bar_1', opts11)).toBe(true);
+    expect(name('\u{10000}foo', opts11)).toBe(false); // supplementary plane, not ASCII
+    // Sanity check: same input is valid under 1.1 when asciiOnly is off.
+    expect(name('\u{10000}foo', { xmlVersion: '1.1' })).toBe(true);
+  });
+
+  it('keeps validate() reason/position consistent with the ASCII-only result', () => {
+    const result = validate('éfoo', 'name', { asciiOnly: true });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('NameStartChar');
+    expect(result.position).toBe(0);
+  });
+
+  it('flags a non-ASCII NameChar (not just NameStartChar) under asciiOnly', () => {
+    const result = validate('fooé', 'name', { asciiOnly: true });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('NameChar');
+    expect(result.position).toBe(3);
+  });
+
+  it('is respected by validateAll via opts passthrough', () => {
+    const results = validateAll(['foo', 'café'], 'name', { asciiOnly: true });
+    expect(results[0].valid).toBe(true);
+    expect(results[1].valid).toBe(false);
+  });
 });

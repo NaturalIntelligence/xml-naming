@@ -110,8 +110,36 @@ const buildRegexes = (startChar, char, flags = '') => {
 const regexes10 = buildRegexes(nameStartChar10, nameChar10);       // no /u — BMP only
 const regexes11 = buildRegexes(nameStartChar11, nameChar11, 'u');  // /u — enables \u{10000}-\u{EFFFF}
 
-const getRegexes = (xmlVersion = '1.0') =>
-  xmlVersion === '1.1' ? regexes11 : regexes10;
+// ---------------------------------------------------------------------------
+// ASCII-only fast path (opt-in, off by default)
+//
+// The XML 1.0 vs 1.1 NameStartChar/NameChar productions differ *only* in
+// their non-ASCII ranges (merged vs split Latin-1 ranges, \u0487, and
+// supplementary planes). Restricted to ASCII, both versions collapse to the
+// same character classes, so a single regex pair covers both xmlVersion
+// values — no /u flag needed.
+//
+// Rationale: unicode-aware regexes (the /u flag, required for XML 1.1's
+// supplementary-plane range) are measurably slower in V8 than plain
+// non-unicode regexes on the same input, even when the input is pure ASCII.
+// For the common case — HTML/SVG ids, XML tags — names are ASCII, so callers
+// who know this can opt in to skip the unicode-aware matching path entirely.
+// This is a real but *conditional* win: mainly for XML 1.1 input (avoids /u),
+// or at scale where the larger unicode character classes add engine
+// overhead. It also changes behaviour (rejects legitimate non-ASCII XML
+// 1.0/1.1 names), so it must never be silently enabled — hence off by
+// default.
+// ---------------------------------------------------------------------------
+
+const nameStartCharAscii = ':A-Za-z_';
+const nameCharAscii = nameStartCharAscii + '\\-\\.\\d';
+
+const regexesAscii = buildRegexes(nameStartCharAscii, nameCharAscii); // no /u — ASCII only
+
+const getRegexes = (xmlVersion = '1.0', asciiOnly = false) => {
+  if (asciiOnly) return regexesAscii;
+  return xmlVersion === '1.1' ? regexes11 : regexes10;
+};
 
 // ---------------------------------------------------------------------------
 // Boolean validators
@@ -121,41 +149,56 @@ const getRegexes = (xmlVersion = '1.0') =>
  * Returns true if the string is a valid XML Name.
  * Colons are allowed anywhere (Name production).
  * Used for: DOCTYPE entity names, notation names, DTD element declarations.
+ *
+ * @param {{ xmlVersion?: '1.0'|'1.1', asciiOnly?: boolean }} [opts]
+ *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
-export const name = (str, { xmlVersion = '1.0' } = {}) =>
-  getRegexes(xmlVersion).name.test(str);
+export const name = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
+  getRegexes(xmlVersion, asciiOnly).name.test(str);
 
 /**
  * Returns true if the string is a valid NCName (Non-Colonized Name).
  * Colons are not permitted.
  * Used for: namespace prefixes, local names, SVG id attributes.
+ *
+ * @param {{ xmlVersion?: '1.0'|'1.1', asciiOnly?: boolean }} [opts]
+ *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
-export const ncName = (str, { xmlVersion = '1.0' } = {}) =>
-  getRegexes(xmlVersion).ncName.test(str);
+export const ncName = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
+  getRegexes(xmlVersion, asciiOnly).ncName.test(str);
 
 /**
  * Returns true if the string is a valid QName (Qualified Name).
  * Allows exactly one colon as a prefix separator: prefix:localName.
  * Used for: element and attribute names in namespace-aware XML/SVG.
+ *
+ * @param {{ xmlVersion?: '1.0'|'1.1', asciiOnly?: boolean }} [opts]
+ *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
-export const qName = (str, { xmlVersion = '1.0' } = {}) =>
-  getRegexes(xmlVersion).qName.test(str);
+export const qName = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
+  getRegexes(xmlVersion, asciiOnly).qName.test(str);
 
 /**
  * Returns true if the string is a valid NMToken.
  * Like Name but no restriction on the first character.
  * Used for: DTD NMTOKEN attribute values.
+ *
+ * @param {{ xmlVersion?: '1.0'|'1.1', asciiOnly?: boolean }} [opts]
+ *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
-export const nmToken = (str, { xmlVersion = '1.0' } = {}) =>
-  getRegexes(xmlVersion).nmToken.test(str);
+export const nmToken = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
+  getRegexes(xmlVersion, asciiOnly).nmToken.test(str);
 
 /**
  * Returns true if the string is a valid NMTokens value.
  * A whitespace-separated list of NMToken values.
  * Used for: DTD NMTOKENS attribute values.
+ *
+ * @param {{ xmlVersion?: '1.0'|'1.1', asciiOnly?: boolean }} [opts]
+ *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
-export const nmTokens = (str, { xmlVersion = '1.0' } = {}) =>
-  getRegexes(xmlVersion).nmTokens.test(str);
+export const nmTokens = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
+  getRegexes(xmlVersion, asciiOnly).nmTokens.test(str);
 
 // ---------------------------------------------------------------------------
 // Diagnostic validator
@@ -168,10 +211,10 @@ const PRODUCTIONS = ['name', 'ncName', 'qName', 'nmToken', 'nmTokens'];
  *
  * @param {string} str
  * @param {'name'|'ncName'|'qName'|'nmToken'|'nmTokens'} production
- * @param {{ xmlVersion?: '1.0'|'1.1' }} [opts]
+ * @param {{ xmlVersion?: '1.0'|'1.1', asciiOnly?: boolean }} [opts]
  * @returns {{ valid: boolean, production: string, input: string, reason?: string, position?: number }}
  */
-export const validate = (str, production, { xmlVersion = '1.0' } = {}) => {
+export const validate = (str, production, { xmlVersion = '1.0', asciiOnly = false } = {}) => {
   if (!PRODUCTIONS.includes(production)) {
     throw new TypeError(
       `Unknown production "${production}". Must be one of: ${PRODUCTIONS.join(', ')}`
@@ -179,12 +222,19 @@ export const validate = (str, production, { xmlVersion = '1.0' } = {}) => {
   }
 
   const validators = { name, ncName, qName, nmToken, nmTokens };
-  const isValid = validators[production](str, { xmlVersion });
+  const isValid = validators[production](str, { xmlVersion, asciiOnly });
 
   if (isValid) return { valid: true, production, input: str };
 
   let reason = 'Does not match the production rules';
   let position;
+
+  // Diagnostic fallback char checks must mirror the same character set the
+  // boolean validator above used, or the reported reason/position could
+  // contradict the `valid: false` result (e.g. flagging a char as illegal
+  // that the unicode-aware check would have accepted).
+  const startCharPattern = asciiOnly ? /^[:A-Za-z_]/ : /^[:A-Za-z_\u00C0-\uFFFD]/;
+  const namePattern = asciiOnly ? /[\w\-\\.:]/ : /[\w\-\\.:\u00B7\u00C0-\uFFFD]/;
 
   if (str.length === 0) {
     reason = 'Input is empty';
@@ -202,13 +252,13 @@ export const validate = (str, production, { xmlVersion = '1.0' } = {}) => {
     position = str.lastIndexOf(':');
   } else if (
     ['name', 'ncName', 'qName'].includes(production) &&
-    !/^[:A-Za-z_\u00C0-\uFFFD]/.test(str[0])
+    !startCharPattern.test(str[0])
   ) {
     reason = `First character "${str[0]}" is not a valid NameStartChar`;
     position = 0;
   } else {
     for (let i = 0; i < str.length; i++) {
-      if (!/[\w\-\\.:\u00B7\u00C0-\uFFFD]/.test(str[i])) {
+      if (!namePattern.test(str[i])) {
         reason = `Character "${str[i]}" at position ${i} is not a valid NameChar`;
         position = i;
         break;
@@ -228,7 +278,7 @@ export const validate = (str, production, { xmlVersion = '1.0' } = {}) => {
  *
  * @param {string[]} strings
  * @param {'name'|'ncName'|'qName'|'nmToken'|'nmTokens'} production
- * @param {{ xmlVersion?: '1.0'|'1.1' }} [opts]
+ * @param {{ xmlVersion?: '1.0'|'1.1', asciiOnly?: boolean }} [opts]
  * @returns {Array<{ valid: boolean, production: string, input: string, reason?: string, position?: number }>}
  */
 export const validateAll = (strings, production, opts = {}) =>
@@ -243,10 +293,12 @@ export const validateAll = (strings, production, opts = {}) =>
  *
  * @param {string} str
  * @param {'name'|'ncName'|'qName'|'nmToken'|'nmTokens'} production
- * @param {{ replacement?: string }} [opts]
+ * @param {{ replacement?: string, asciiOnly?: boolean }} [opts]
+ *   asciiOnly: also replace any non-ASCII character, not just XML-illegal
+ *   ones (default false).
  * @returns {string}
  */
-export const sanitize = (str, production = 'name', { replacement = '_' } = {}) => {
+export const sanitize = (str, production = 'name', { replacement = '_', asciiOnly = false } = {}) => {
   if (!str) return replacement;
 
   let result = str;
@@ -257,7 +309,8 @@ export const sanitize = (str, production = 'name', { replacement = '_' } = {}) =
   }
 
   // Replace illegal characters
-  result = result.replace(/[^\w\-\.:\u00B7\u00C0-\uFFFD]/g, replacement);
+  const allowedCharPattern = asciiOnly ? /[^\w\-\.:]/g : /[^\w\-\.:\u00B7\u00C0-\uFFFD]/g;
+  result = result.replace(allowedCharPattern, replacement);
 
   // Fix invalid start character for Name / NCName / QName
   if (production !== 'nmToken' && production !== 'nmTokens') {

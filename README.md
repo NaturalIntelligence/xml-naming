@@ -74,6 +74,33 @@ name('\uD800\uDC00', { xmlVersion: '1.1' })  // true
 
 ---
 
+### ASCII-only fast path
+
+All validators, `validate`, `validateAll`, and `sanitize` also accept `{ asciiOnly: true }`.
+When set, matching is restricted to the ASCII subset of the NameStartChar/NameChar
+productions and skips unicode-aware regex matching entirely — no `\u00C0-\uFFFD`-style
+ranges, and (for XML 1.1) no `/u` regex flag. Unicode-aware regexes are measurably slower
+than plain ASCII matching in JS engines, so this is a real performance win when you know
+your input is ASCII-only, which is the common case for HTML/SVG ids and most XML tags.
+
+**This is opt-in and defaults to `false`** for backward compatibility: turning it on
+changes behavior, since it rejects legitimate non-ASCII XML names that would otherwise be
+valid. Only enable it when you control the input and know it's ASCII (e.g. internal
+identifiers, machine-generated names), not for validating arbitrary user- or
+externally-supplied XML/SVG content.
+
+```js
+import { name, sanitize } from 'xml-naming';
+
+name('café', { asciiOnly: true })   // false — 'é' is not ASCII, even though it's
+name('café')                        //  true    a valid XML 1.0/1.1 NameChar
+
+sanitize('café', 'name', { asciiOnly: true })  // 'caf_' — non-ASCII replaced too
+sanitize('café', 'name')                       // 'café' — left untouched by default
+```
+
+---
+
 ### Diagnostic validation
 
 ```js
@@ -172,18 +199,24 @@ sanitize('my element', 'name', { replacement: '-' })  // 'my-element'
 
 `opts`:
 - `xmlVersion`: `'1.0'` (default) | `'1.1'`
+- `asciiOnly`: boolean (default `false`) — ASCII-only fast path, see above
 
 ### `validate(str, production, opts?)` → `ValidationResult`
 
 `production`: `'name'` | `'ncName'` | `'qName'` | `'nmToken'` | `'nmTokens'`
 
+`opts`: same as boolean validators (`xmlVersion`, `asciiOnly`)
+
 ### `validateAll(strings[], production, opts?)` → `ValidationResult[]`
+
+`opts`: same as `validate`
 
 ### `sanitize(str, production?, opts?)` → `string`
 
 `opts`:
 - `xmlVersion`: `'1.0'` | `'1.1'`
 - `replacement`: string (default `'_'`)
+- `asciiOnly`: boolean (default `false`) — also replaces non-ASCII characters, not just XML-illegal ones
 
 ---
 

@@ -1,6 +1,15 @@
 export interface ValidationOptions {
   /** XML specification version to validate against. Defaults to '1.0'. */
   xmlVersion?: '1.0' | '1.1';
+  /**
+   * Restrict matching to the ASCII subset of the NameStartChar/NameChar
+   * productions and skip unicode-aware regex matching entirely. Faster,
+   * especially for XML 1.1 (which otherwise requires the `/u` regex flag),
+   * but rejects legitimate non-ASCII XML names. Off by default for
+   * backward compatibility — opt in only when inputs are known to be ASCII.
+   * Defaults to false.
+   */
+  asciiOnly?: boolean;
 }
 
 export interface SanitizeOptions extends ValidationOptions {
