@@ -1,6 +1,6 @@
 {
   "name": "xml-naming",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Validates XML name productions — Name, NCName, QName, NMToken, NMTokens — for XML 1.0 and 1.1",
   "type": "module",
   "main": "./src/index.js",
@@ -20,6 +20,7 @@
     "perf": "node specs/perf.js"
   },
   "keywords": [
+    "fast",
     "xml",
     "xml-name",
     "ncname",
