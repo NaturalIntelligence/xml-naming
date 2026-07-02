@@ -101,6 +101,61 @@ sanitize('café', 'name')                       // 'café' — left untouched by
 
 ---
 
+### Memoized validator (`createValidator`)
+
+Real documents tend to reuse a small vocabulary of tag/attribute names across many
+siblings (`id`, `class`, `href`, ... repeated across hundreds of elements). Calling the
+plain boolean validators re-runs the regex on every call, even for names seen before.
+
+`createValidator(production, opts)` returns a memoized validator function: `xmlVersion`
+and `asciiOnly` are fixed at creation time (so the regex is resolved once, not per call),
+and repeated inputs after the first are served from an internal cache instead of
+re-matching the regex.
+
+```js
+import { createValidator } from 'xml-naming';
+
+const isQName = createValidator('qName', { xmlVersion: '1.0' });
+
+isQName('sku');   // false → regex test (cache miss), result cached
+isQName('sku');   // false → cache hit, no regex run
+```
+
+Use one instance per document/parse (or reuse across a session — your choice), rather
+than creating one per call:
+
+```js
+// e.g. inside a parser, once per parse call:
+const isValidTag = createValidator('qName', { asciiOnly: true });
+
+for (const tagName of tagNames) {
+  if (!isValidTag(tagName)) throw new Error(`Invalid tag name: ${tagName}`);
+}
+```
+
+Because the validator is a plain function, this loop already gets short-circuit
+behaviour (via `break`/`throw` on first failure) and zero extra allocation on the happy
+path — no separate "bulk" API is needed for that.
+
+**Cache bound:** the internal cache is capped by `maxCacheSize` (default `2048`). Once
+the cap is reached, new distinct strings are still validated correctly, they're just no
+longer cached — existing cached entries keep being served. This keeps memory bounded
+even against high-cardinality or adversarial input (e.g. externally-supplied names that
+never repeat), without the cost of a full LRU or the perf cliff of reset-and-refill.
+
+Call `.reset()` on the returned function to clear the cache manually, e.g. between
+unrelated parse calls if you're reusing one validator instance across a long-running
+process:
+
+```js
+isQName.reset();
+```
+
+The cache is private to each `createValidator()` instance — there's no shared/global
+cache, so unrelated callers never interfere with each other.
+
+---
+
 ### Diagnostic validation
 
 ```js
@@ -200,6 +255,13 @@ sanitize('my element', 'name', { replacement: '-' })  // 'my-element'
 `opts`:
 - `xmlVersion`: `'1.0'` (default) | `'1.1'`
 - `asciiOnly`: boolean (default `false`) — ASCII-only fast path, see above
+
+### `createValidator(production, opts?)` → memoized `(str) => boolean`, with `.reset()`
+
+`opts`:
+- `xmlVersion`: `'1.0'` (default) | `'1.1'`
+- `asciiOnly`: boolean (default `false`)
+- `maxCacheSize`: number (default `2048`) — cache stops accepting new entries once reached; existing entries keep serving hits
 
 ### `validate(str, production, opts?)` → `ValidationResult`
 

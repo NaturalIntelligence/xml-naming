@@ -1,4 +1,4 @@
-import { name, ncName, qName, nmToken, nmTokens, validate, validateAll, sanitize } from '../src/index.js';
+import { name, ncName, qName, nmToken, nmTokens, validate, validateAll, sanitize, createValidator } from '../src/index.js';
 
 // ---------------------------------------------------------------------------
 // name()
@@ -446,5 +446,104 @@ describe('asciiOnly option', () => {
     const results = validateAll(['foo', 'café'], 'name', { asciiOnly: true });
     expect(results[0].valid).toBe(true);
     expect(results[1].valid).toBe(false);
+  });
+});
+// ---------------------------------------------------------------------------
+// createValidator()
+// ---------------------------------------------------------------------------
+
+describe('createValidator()', () => {
+  it('throws on unknown production', () => {
+    expect(() => createValidator('bogus')).toThrowError(TypeError);
+  });
+
+  it('returns a function that matches the uncached validator for the same production', () => {
+    const isName = createValidator('name');
+    const cases = ['foo', '1foo', 'a:b:c', '-bad', '', 'café', ':', 'a-b.c1'];
+    for (const str of cases) {
+      expect(isName(str)).toBe(name(str));
+    }
+  });
+
+  it('matches the uncached validator for qName', () => {
+    const isQName = createValidator('qName');
+    const cases = ['svg:circle', 'foo', 'a:b:c', ':foo', 'foo:'];
+    for (const str of cases) {
+      expect(isQName(str)).toBe(qName(str));
+    }
+  });
+
+  it('matches the uncached validator for ncName', () => {
+    const isNc = createValidator('ncName');
+    const cases = ['my-id', 'xlink:href', 'foo'];
+    for (const str of cases) {
+      expect(isNc(str)).toBe(ncName(str));
+    }
+  });
+
+  it('matches the uncached validator for nmToken and nmTokens', () => {
+    const isTok = createValidator('nmToken');
+    const isToks = createValidator('nmTokens');
+    expect(isTok('123')).toBe(nmToken('123'));
+    expect(isTok('foo bar')).toBe(nmToken('foo bar'));
+    expect(isToks('tok1 tok2 -foo 123')).toBe(nmTokens('tok1 tok2 -foo 123'));
+  });
+
+  it('respects xmlVersion fixed at creation time', () => {
+    const is10 = createValidator('name', { xmlVersion: '1.0' });
+    const is11 = createValidator('name', { xmlVersion: '1.1' });
+    // Supplementary-plane char is only valid as a NameStartChar in XML 1.1
+    const supplementaryChar = '\u{10000}';
+    expect(is10(supplementaryChar)).toBe(false);
+    expect(is11(supplementaryChar)).toBe(true);
+  });
+
+  it('respects asciiOnly fixed at creation time', () => {
+    const isAscii = createValidator('name', { asciiOnly: true });
+    const isUnicode = createValidator('name', { asciiOnly: false });
+    expect(isAscii('café')).toBe(false);
+    expect(isUnicode('café')).toBe(true);
+  });
+
+  it('returns the same boolean result on repeated calls (cache hit path)', () => {
+    const isQName = createValidator('qName');
+    expect(isQName('sku')).toBe(true);
+    expect(isQName('sku')).toBe(true);
+    expect(isQName('1bad')).toBe(false);
+    expect(isQName('1bad')).toBe(false);
+  });
+
+  it('stops caching new entries once maxCacheSize is reached, but keeps validating correctly', () => {
+    const isName = createValidator('name', { maxCacheSize: 2 });
+    expect(isName('a')).toBe(true);
+    expect(isName('b')).toBe(true);
+    // cache is now full (size 2) — further distinct inputs are still validated
+    // correctly, just not cached
+    expect(isName('c')).toBe(true);
+    expect(isName('1bad')).toBe(false);
+    expect(isName('d')).toBe(true);
+    // previously cached entries still resolve correctly
+    expect(isName('a')).toBe(true);
+    expect(isName('b')).toBe(true);
+  });
+
+  it('exposes a reset() method that clears the cache without breaking correctness', () => {
+    const isName = createValidator('name', { maxCacheSize: 1 });
+    expect(isName('a')).toBe(true);  // fills cache
+    expect(isName('b')).toBe(true);  // not cached (cache full)
+    isName.reset();
+    expect(isName('b')).toBe(true);  // now cacheable again post-reset
+    expect(isName('a')).toBe(true);
+  });
+
+  it('keeps caches independent across separate createValidator instances', () => {
+    const v1 = createValidator('name', { maxCacheSize: 1 });
+    const v2 = createValidator('name', { maxCacheSize: 1 });
+    v1('x');
+    v2('y');
+    // Filling v1's single-entry cache with 'x' must not affect v2's ability
+    // to validate/cache 'y', and vice versa — no shared state.
+    expect(v1('x')).toBe(true);
+    expect(v2('y')).toBe(true);
   });
 });

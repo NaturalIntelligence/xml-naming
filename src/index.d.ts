@@ -64,6 +64,31 @@ export function nmToken(str: string, opts?: ValidationOptions): boolean;
  */
 export function nmTokens(str: string, opts?: ValidationOptions): boolean;
 
+export interface CreateValidatorOptions extends ValidationOptions {
+  /**
+   * Max number of distinct strings to cache. Once reached, new strings are
+   * still validated correctly but are no longer cached; existing cached
+   * entries keep being served. Defaults to 2048.
+   */
+  maxCacheSize?: number;
+}
+
+export interface MemoizedValidator {
+  (str: string): boolean;
+  /** Clears the internal cache. */
+  reset(): void;
+}
+
+/**
+ * Returns a memoized boolean validator function for a single production.
+ * `opts` (xmlVersion, asciiOnly) are fixed at creation time. Repeated calls
+ * with the same string after the first are served from an internal cache
+ * instead of re-running the regex — useful when validating a small, reused
+ * vocabulary of names (e.g. tag/attribute names across many siblings in a
+ * document) many times.
+ */
+export function createValidator(production: Production, opts?: CreateValidatorOptions): MemoizedValidator;
+
 /**
  * Validates a string against a named XML production and returns a detailed result.
  */

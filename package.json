@@ -1,6 +1,6 @@
 {
   "name": "xml-naming",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Validates XML name productions — Name, NCName, QName, NMToken, NMTokens — for XML 1.0 and 1.1",
   "type": "module",
   "main": "./src/index.js",
