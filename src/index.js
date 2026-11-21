@@ -93,6 +93,13 @@ const nameChar11 =
 //   supplementary code points rather than lone surrogates (which are illegal XML).
 // ---------------------------------------------------------------------------
 
+// XML whitespace production S ::= (#x20 | #x9 | #xD | #xA)+ (same in 1.0 and 1.1).
+// Deliberately NOT JS `\s`: `\s` also matches U+1680 and U+FEFF, which are valid
+// NameChars, so `[NameChar]+(?:\s+[NameChar]+)*` has overlapping quantifiers and
+// backtracks exponentially on a failing match (ReDoS). The separator class must
+// stay disjoint from the NameChar class.
+const XML_WS = '\\x20\\x09\\x0D\\x0A';
+
 const buildRegexes = (startChar, char, flags = '') => {
   const ncStart = startChar.replace(':', '');
   const ncChar = char.replace(':', '');
@@ -103,7 +110,7 @@ const buildRegexes = (startChar, char, flags = '') => {
     ncName: new RegExp(`^${ncNamePat}$`, flags),
     qName: new RegExp(`^${ncNamePat}(?::${ncNamePat})?$`, flags),
     nmToken: new RegExp(`^[${char}]+$`, flags),
-    nmTokens: new RegExp(`^[${char}]+(?:\\s+[${char}]+)*$`, flags),
+    nmTokens: new RegExp(`^[${char}]+(?:[${XML_WS}]+[${char}]+)*$`, flags),
   };
 };
 

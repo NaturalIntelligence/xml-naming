@@ -232,6 +232,57 @@ describe('nmTokens()', () => {
   it('rejects empty string', () => {
     expect(nmTokens('')).toBe(false);
   });
+
+  it('accepts all XML whitespace (#x20, #x9, #xD, #xA) as separators', () => {
+    expect(nmTokens('a b\tc\r\nd')).toBe(true);
+  });
+
+  it('rejects non-XML whitespace separators (e.g. NBSP, U+2003, U+3000)', () => {
+    expect(nmTokens('a\u00A0b')).toBe(false);
+    expect(nmTokens('a\u2003b')).toBe(false);
+    expect(nmTokens('a\u3000b')).toBe(false);
+  });
+
+  it('rejects leading/trailing whitespace', () => {
+    expect(nmTokens(' a')).toBe(false);
+    expect(nmTokens('a ')).toBe(false);
+  });
+
+  // U+1680 and U+FEFF are both NameChar and JS \s. They must be treated as
+  // token characters, never separators, and must not cause catastrophic backtracking.
+  it('treats U+1680 / U+FEFF as NameChars, not separators', () => {
+    expect(nmTokens('a\u1680b')).toBe(true);   // one token
+    expect(nmTokens('a\uFEFFb')).toBe(true);   // one token
+  });
+
+  describe('ReDoS regression (overlapping \\s / NameChar)', () => {
+    const budgetMs = 50;
+    for (const xmlVersion of ['1.0', '1.1']) {
+      for (const ch of ['\u1680', '\uFEFF']) {
+        it(`rejects ${'U+' + ch.codePointAt(0).toString(16).toUpperCase()} runs in linear time (XML ${xmlVersion})`, () => {
+          const payload = 'a' + ch.repeat(30) + '!';
+          const start = performance.now();
+          expect(nmTokens(payload, { xmlVersion })).toBe(false);
+          expect(performance.now() - start).toBeLessThan(budgetMs);
+        });
+      }
+    }
+
+    it('stays fast for very long invalid inputs', () => {
+      const start = performance.now();
+      expect(nmTokens('a' + '\u1680'.repeat(100000) + '!')).toBe(false);
+      expect(performance.now() - start).toBeLessThan(budgetMs * 4);
+    });
+
+    it('is also fast through validate() and createValidator()', () => {
+      const payload = 'a' + '\uFEFF'.repeat(30) + '!';
+      const isToks = createValidator('nmTokens');
+      const start = performance.now();
+      expect(validate(payload, 'nmTokens').valid).toBe(false);
+      expect(isToks(payload)).toBe(false);
+      expect(performance.now() - start).toBeLessThan(budgetMs);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
