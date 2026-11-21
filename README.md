@@ -57,6 +57,10 @@ nmToken('foo bar')   // false ← space not allowed
 // NMTokens — whitespace-separated NMToken list
 nmTokens('tok1 tok2 -foo 123')  // true
 ```
+### Non-string input
+
+All validators return `false` for non-string input (`null`, `undefined`, numbers,
+arrays, objects); `validate()` returns `{ valid: false, reason: 'Input must be a string' }`.
 
 ### XML version option
 
@@ -137,7 +141,9 @@ Because the validator is a plain function, this loop already gets short-circuit
 behaviour (via `break`/`throw` on first failure) and zero extra allocation on the happy
 path — no separate "bulk" API is needed for that.
 
-**Cache bound:** the internal cache is capped by `maxCacheSize` (default `2048`). Once
+**Cache bound:** the internal cache is capped by `maxCacheSize` (default `2048`), and
+strings longer than 256 characters are validated but never cached (so long
+externally-supplied strings can't be retained in memory). Once
 the cap is reached, new distinct strings are still validated correctly, they're just no
 longer cached — existing cached entries keep being served. This keeps memory bounded
 even against high-cardinality or adversarial input (e.g. externally-supplied names that

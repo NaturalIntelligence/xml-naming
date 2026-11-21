@@ -68,12 +68,14 @@ export interface CreateValidatorOptions extends ValidationOptions {
   /**
    * Max number of distinct strings to cache. Once reached, new strings are
    * still validated correctly but are no longer cached; existing cached
-   * entries keep being served. Defaults to 2048.
+   * entries keep being served. Defaults to 2048. Strings longer than 256
+   * characters are validated but never cached.
    */
   maxCacheSize?: number;
 }
 
 export interface MemoizedValidator {
+  /** Returns false for non-string input. */
   (str: string): boolean;
   /** Clears the internal cache. */
   reset(): void;

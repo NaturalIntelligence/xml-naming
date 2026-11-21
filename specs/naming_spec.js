@@ -598,3 +598,60 @@ describe('createValidator()', () => {
     expect(v2('y')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Non-string input
+// ---------------------------------------------------------------------------
+
+describe('non-string input', () => {
+  const nonStrings = [null, undefined, 0, 123, true, {}, ['a'], { toString: () => 'ok' }];
+
+  it('is rejected by every boolean validator', () => {
+    for (const fn of [name, ncName, qName, nmToken, nmTokens]) {
+      for (const v of nonStrings) {
+        expect(fn(v)).toBe(false);
+      }
+    }
+  });
+
+  it('is rejected by createValidator() and never throws', () => {
+    for (const production of ['name', 'ncName', 'qName', 'nmToken', 'nmTokens']) {
+      const isValid = createValidator(production);
+      for (const v of nonStrings) {
+        expect(isValid(v)).toBe(false);
+        expect(isValid(v)).toBe(false); // repeat: must not be cached as true
+      }
+    }
+  });
+
+  it('is reported by validate()/validateAll() without throwing', () => {
+    const result = validate(null, 'name');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/string/i);
+    expect(result.position).toBeUndefined();
+    expect(validateAll([undefined, 'foo'], 'name').map(r => r.valid)).toEqual([false, true]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createValidator() — long strings are validated but not cached
+// ---------------------------------------------------------------------------
+
+describe('createValidator() — long strings', () => {
+  it('validates strings beyond the cacheable length correctly, repeatedly', () => {
+    const isName = createValidator('name');
+    const longValid = 'a'.repeat(10000);
+    const longInvalid = 'a'.repeat(10000) + '!';
+    expect(isName(longValid)).toBe(true);
+    expect(isName(longValid)).toBe(true);
+    expect(isName(longInvalid)).toBe(false);
+    expect(isName(longInvalid)).toBe(false);
+  });
+
+  it('does not let long strings consume cache slots', () => {
+    const isName = createValidator('name', { maxCacheSize: 1 });
+    expect(isName('a'.repeat(1000))).toBe(true);
+    expect(isName('b')).toBe(true);   // still cacheable: slot not used by the long string
+    expect(isName('1bad')).toBe(false);
+  });
+});
