@@ -161,7 +161,7 @@ const getRegexes = (xmlVersion = '1.0', asciiOnly = false) => {
  *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
 export const name = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
-  getRegexes(xmlVersion, asciiOnly).name.test(str);
+  typeof str === 'string' && getRegexes(xmlVersion, asciiOnly).name.test(str);
 
 /**
  * Returns true if the string is a valid NCName (Non-Colonized Name).
@@ -172,7 +172,7 @@ export const name = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
  *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
 export const ncName = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
-  getRegexes(xmlVersion, asciiOnly).ncName.test(str);
+  typeof str === 'string' && getRegexes(xmlVersion, asciiOnly).ncName.test(str);
 
 /**
  * Returns true if the string is a valid QName (Qualified Name).
@@ -183,7 +183,7 @@ export const ncName = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
  *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
 export const qName = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
-  getRegexes(xmlVersion, asciiOnly).qName.test(str);
+  typeof str === 'string' && getRegexes(xmlVersion, asciiOnly).qName.test(str);
 
 /**
  * Returns true if the string is a valid NMToken.
@@ -194,7 +194,7 @@ export const qName = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
  *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
 export const nmToken = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
-  getRegexes(xmlVersion, asciiOnly).nmToken.test(str);
+  typeof str === 'string' && getRegexes(xmlVersion, asciiOnly).nmToken.test(str);
 
 /**
  * Returns true if the string is a valid NMTokens value.
@@ -205,7 +205,7 @@ export const nmToken = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
  *   asciiOnly: skip unicode-aware matching, ASCII names only (default false).
  */
 export const nmTokens = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
-  getRegexes(xmlVersion, asciiOnly).nmTokens.test(str);
+  typeof str === 'string' && getRegexes(xmlVersion, asciiOnly).nmTokens.test(str);
 
 // ---------------------------------------------------------------------------
 // Memoized validator factory
@@ -255,6 +255,8 @@ export const createValidator = (production, { xmlVersion = '1.0', asciiOnly = fa
   let cache = new Map();
 
   const validator = (str) => {
+    if (typeof str !== 'string') return false; // never becomes a cache key
+
     const cached = cache.get(str);
     if (cached !== undefined) return cached;
 
@@ -285,6 +287,10 @@ export const validate = (str, production, { xmlVersion = '1.0', asciiOnly = fals
     throw new TypeError(
       `Unknown production "${production}". Must be one of: ${PRODUCTIONS.join(', ')}`
     );
+  }
+
+  if (typeof str !== 'string') {
+    return { valid: false, production, input: str, reason: 'Input must be a string' };
   }
 
   const validators = { name, ncName, qName, nmToken, nmTokens };
