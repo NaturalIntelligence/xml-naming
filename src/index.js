@@ -233,6 +233,9 @@ export const nmTokens = (str, { xmlVersion = '1.0', asciiOnly = false } = {}) =>
 
 const PRODUCTIONS = ['name', 'ncName', 'qName', 'nmToken', 'nmTokens'];
 
+// Real tag/attribute vocabularies are short. validate but dont cache
+const MAX_CACHED_LENGTH = 256;
+
 /**
  * Returns a memoized boolean validator function for a single production,
  * with opts fixed at creation time.
@@ -261,7 +264,7 @@ export const createValidator = (production, { xmlVersion = '1.0', asciiOnly = fa
     if (cached !== undefined) return cached;
 
     const result = regex.test(str);
-    if (cache.size < maxCacheSize) cache.set(str, result);
+    if (cache.size < maxCacheSize && str.length <= MAX_CACHED_LENGTH) cache.set(str, result);
     return result;
   };
 
